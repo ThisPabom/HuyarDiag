@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HuyarDiag</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard">
+        <header>
+            <h1>Huyar<span class="highlight">Diag</span></h1>
+            <button id="connectBtn" class="btn primary-btn">
+                <span class="btn-text">Подключить OBD2</span>
+            </button>
+        </header>
+
+        <main>
+            <div class="status-panel">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="statusText">Отключено</span>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-title">Обороты</div>
+                    <div class="metric-value" id="rpmValue">0</div>
+                    <div class="metric-unit">RPM</div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-title">Скорость</div>
+                    <div class="metric-value" id="speedValue">0</div>
+                    <div class="metric-unit">км/ч</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-title">Температура ОЖ</div>
+                    <div class="metric-value" id="tempValue">--</div>
+                    <div class="metric-unit">°C</div>
+                </div>
+            </div>
+
+            <div class="console-panel">
+                <div class="console-title">Лог устройства</div>
+                <div id="consoleLog" class="console">
+                    <div class="log-entry system">Ожидание подключения...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="obd.js"></script>
+</body>
+</html>
