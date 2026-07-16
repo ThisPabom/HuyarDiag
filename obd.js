@@ -7,9 +7,9 @@ const rpmValue = document.getElementById('rpmValue');
 const speedValue = document.getElementById('speedValue');
 const tempValue = document.getElementById('tempValue');
 
-// ELM327 BLE Standard UUIDs
-const SERVICE_UUID = 0xFFE0;
-const CHARACTERISTIC_UUID = 0xFFE1;
+// СТАНДАРТНЫЙ UUID ДЛЯ КЛАССИЧЕСКОГО BLUETOOTH (SPP) НА ANDROID
+// Старый UUID 0xFFE0 заменен на международный стандарт Serial Port
+const SERIAL_UUID = '00001101-0000-1000-8000-00805f9b34fb';
 
 let bluetoothDevice;
 let obdCharacteristic;
@@ -30,24 +30,23 @@ async function connect() {
     try {
         log('Запрос устройства Bluetooth...', 'system');
         
-        // Изменяем фильтр, чтобы увидеть ВСЕ устройства в окружении
+        // Настройка фильтра для Android (ищем все устройства, но запрашиваем доступ к SPP)
         bluetoothDevice = await navigator.bluetooth.requestDevice({
             acceptAllDevices: true,
-            optionalServices: [SERVICE_UUID] // Оставляем UUID здесь, чтобы иметь право подключиться к нему позже
+            optionalServices: [SERIAL_UUID]
         });
 
         bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
 
         log(`Подключение к ${bluetoothDevice.name || 'OBD2'}...`, 'system');
-        
-        // Дальнейший код остается без изменений...
         const server = await bluetoothDevice.gatt.connect();
 
-        log('Получение сервиса...', 'system');
-        const service = await server.getPrimaryService(SERVICE_UUID);
+        log('Получение сервиса SPP...', 'system');
+        const service = await server.getPrimaryService(SERIAL_UUID);
 
         log('Получение характеристики...', 'system');
-        obdCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+        // В классическом Bluetooth SPP UUID сервиса и характеристики обычно совпадают
+        obdCharacteristic = await service.getCharacteristic(SERIAL_UUID);
 
         obdCharacteristic.addEventListener('characteristicvaluechanged', handleData);
         await obdCharacteristic.startNotifications();
@@ -56,9 +55,9 @@ async function connect() {
         statusText.textContent = 'Подключено';
         connectBtn.textContent = 'Отключить';
         connectBtn.classList.remove('primary-btn');
-        log('Успешно подключено!', 'success');
+        log('Успешно подключено к адаптеру!', 'success');
 
-        // Инициализация ELM327
+        // Запуск инициализации под ВАЗ-2110
         initializeELM327();
     } catch (error) {
         log(`Ошибка подключения: ${error.message}`, 'error');
@@ -86,16 +85,14 @@ async function processQueue() {
 
     const cmd = commandQueue.shift();
     isWaitingForResponse = true;
-    responseBuffer = ''; // Очищаем буфер перед новым запросом
+    responseBuffer = ''; 
     
     try {
         const encoder = new TextEncoder();
-        // Добавляем возврат каретки (CR) в конце команды
         const data = encoder.encode(cmd + '\r');
         await obdCharacteristic.writeValue(data);
         log(`-> ${cmd}`, 'tx');
         
-        // Тайм-аут на случай, если адаптер не ответит
         setTimeout(() => {
             if (isWaitingForResponse) {
                 isWaitingForResponse = false;
@@ -116,7 +113,6 @@ function handleData(event) {
     
     responseBuffer += str;
 
-    // ELM327 завершает ответ символом '>'
     if (responseBuffer.includes('>')) {
         const fullResponse = responseBuffer.replace(/>/g, '').trim();
         if (fullResponse) {
@@ -129,10 +125,9 @@ function handleData(event) {
 }
 
 function parseOBDResponse(response) {
-    // Убираем пробелы и переносы
     const cleanStr = response.replace(/[\s\r]/g, '');
     
-    // Обороты (010C) - Ответ: 41 0C A B -> ((A * 256) + B) / 4
+    // Обороты (010C)
     if (cleanStr.startsWith('410C')) {
         const hex = cleanStr.substring(4, 8);
         if (hex.length === 4) {
@@ -140,7 +135,7 @@ function parseOBDResponse(response) {
             rpmValue.textContent = Math.round(rpm);
         }
     }
-    // Скорость (010D) - Ответ: 41 0D A -> A
+    // Скорость (010D)
     else if (cleanStr.startsWith('410D')) {
         const hex = cleanStr.substring(4, 6);
         if (hex.length === 2) {
@@ -148,9 +143,9 @@ function parseOBDResponse(response) {
             speedValue.textContent = speed;
         }
     }
-    // Температура (0105) - Ответ: 41 05 A -> A - 40
+    // Температура (0105)
     else if (cleanStr.startsWith('4105')) {
-        const hex = cleanStr.substring(4, 6);
+        const hex = cleanStr.substring(4, 6)
         if (hex.length === 2) {
             const temp = parseInt(hex, 16) - 40;
             tempValue.textContent = temp;
@@ -159,23 +154,28 @@ function parseOBDResponse(response) {
 }
 
 function initializeELM327() {
-    // Базовые команды инициализации
-    sendCommand('ATZ'); // Сброс
-    sendCommand('ATE0'); // Отключить эхо
-    sendCommand('ATL0'); // Отключить переносы строк
-    sendCommand('ATSP0'); // Автоматический поиск протокола
+    log('Инициализация протокола ВАЗ (K-Line)...', 'system');
+    sendCommand('ATZ');   // Сброс
+    sendCommand('ATE0');  // Отключить эхо
+    sendCommand('ATL0');  // Отключить переносы строк
     
-    // Начинаем опрос данных через 3 секунды после инициализации
-    setTimeout(startPolling, 3000);
+    // Принудительный выбор 5-го протокола (ISO 14230-4 KWP Fast Init). 
+    // Именно он чаще всего открывает блоки Январь 7.2 и Bosch 7.9.7 на 2110.
+    sendCommand('ATSP5'); 
+    
+    // Увеличиваем таймаут ожидания ответа от старого ЭБУ
+    sendCommand('ATST64'); 
+    
+    setTimeout(startPolling, 4000);
 }
 
 function startPolling() {
+    log('Запуск опроса датчиков...', 'system');
     pollingInterval = setInterval(() => {
-        // Запрашиваем Обороты, Скорость, Температуру
-        sendCommand('010C');
-        sendCommand('010D');
-        sendCommand('0105');
-    }, 1000); // Опрос каждую секунду
+        sendCommand('010C'); // Обороты
+        sendCommand('010D'); // Скорость
+        sendCommand('0105'); // Температура
+    }, 1200); // Опрос чуть замедлен (1.2 сек) для стабильности K-Line
 }
 
 connectBtn.addEventListener('click', () => {
@@ -183,8 +183,8 @@ connectBtn.addEventListener('click', () => {
         bluetoothDevice.gatt.disconnect();
     } else {
         if (!navigator.bluetooth) {
-            log('Web Bluetooth API не поддерживается в этом браузере!', 'error');
-            alert('Ваш браузер не поддерживает Web Bluetooth. Пожалуйста, используйте совместимый браузер (например, Bluefy для iOS).');
+            log('Web Bluetooth не поддерживается вашим браузером!', 'error');
+            alert('Откройте сайт строго через Google Chrome на Android.');
             return;
         }
         connect();
