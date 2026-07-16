@@ -29,14 +29,18 @@ function log(message, type = 'system') {
 async function connect() {
     try {
         log('Запрос устройства Bluetooth...', 'system');
+        
+        // Изменяем фильтр, чтобы увидеть ВСЕ устройства в окружении
         bluetoothDevice = await navigator.bluetooth.requestDevice({
-            filters: [{ services: [SERVICE_UUID] }],
-            optionalServices: [SERVICE_UUID]
+            acceptAllDevices: true,
+            optionalServices: [SERVICE_UUID] // Оставляем UUID здесь, чтобы иметь право подключиться к нему позже
         });
 
         bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
 
         log(`Подключение к ${bluetoothDevice.name || 'OBD2'}...`, 'system');
+        
+        // Дальнейший код остается без изменений...
         const server = await bluetoothDevice.gatt.connect();
 
         log('Получение сервиса...', 'system');
